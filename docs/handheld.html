@@ -82,7 +82,8 @@ a{color:var(--acc)}
  <div class="seg" role="group" aria-label="Band"><button data-b="2" aria-pressed="true">2 m</button><button data-b="7" aria-pressed="false">70 cm</button></div>
  <input type="search" id="q" placeholder="Search make or model" aria-label="Search radios">
  <div class="seg" role="group" aria-label="Show"><button data-v="all" aria-pressed="true">All</button><button data-v="full" aria-pressed="false">Complete data</button><button data-v="new" aria-pressed="false">Added</button></div>
- <button class="hp" id="hp" aria-pressed="false" title="Show only radios with narrow-spacing dynamic range of at least 72 dB and wide-spacing of at least 90 dB in the selected band">High perf</button>
+ <button class="hp" id="hp" aria-pressed="false" title="Click to cycle: narrow ≥ 71 dB, wide ≥ 81 dB, both, then off">High perf</button>
+ <button class="hp" id="bt" aria-pressed="false" title="Shows only radios at least as good as the most recently selected radio on both narrow-spacing and wide-spacing dynamic range. Select a radio first.">Better</button>
 </div>
 <div class="chips" id="chips" role="group" aria-label="Filter by make"></div>
 
@@ -128,13 +129,17 @@ const $=s=>document.querySelector(s),C=['#0a84c6','#e0731a','#2f9e44','#a23cc0']
 const MK=[...new Set(rows.map(r=>r.make))].sort((a,b)=>a.localeCompare(b));
 const hue=m=>Math.round(MK.indexOf(m)*360/MK.length);
 const M={s:{n:'Sensitivity',u:'µV',lo:1,min:.08,max:.3},w:{n:'Wide-spacing DR',min:50,max:110},n:{n:'Narrow-spacing DR',min:35,max:80},a:{n:'Adjacent rejection',min:35,max:95},t:{n:'Score',min:100,max:260}};
-let band='2',q='',makes=new Set(),view='all',sort={k:'t',d:-1},sel=[],hp=false;const HN=72,HW=90;
+let band='2',q='',makes=new Set(),view='all',sort={k:'t',d:-1},sel=[],hp=0,bt=false;let HN=70,HW=80;function thr(){HN=71;HW=81}
 const full=o=>['w','n','a'].every(m=>o[m+band]!=null);
 function score(o){const p=['w','n','a'].map(m=>o[m+band]).filter(x=>x!=null);return p.length?p.reduce((a,b)=>a+b,0):null}
 const get=(o,k)=>k==='t'?score(o):o[k+band];
 const pct=(v,m)=>{let p=Math.max(0,Math.min(1,(v-m.min)/(m.max-m.min)));return Math.round((m.lo?1-p:p)*100)};
 const fmt=(v,k)=>v==null?'—':k==='s'?v.toFixed(2):v;
-function vis(){return rows.filter(o=>(!q||(o.make+' '+o.model).toLowerCase().includes(q))&&(!makes.size||makes.has(o.make))&&(view!=='new'||o.src)&&(view!=='full'||full(o))&&(view!=='chk'||o.v===0)&&(!hp||(o['n'+band]>=HN&&o['w'+band]>=HW))&&(o['s'+band]!=null||o['n'+band]!=null))}
+const ref=()=>sel.length?rows[sel[sel.length-1]]:null;
+function beat(o,r){const n=r['n'+band],w=r['w'+band];return(n==null||o['n'+band]>=n)&&(w==null||o['w'+band]>=w)}
+function rfUI(){const r=ref(),b=$('#bt');b.setAttribute('aria-pressed',bt);b.textContent=bt&&r?'Better than '+r.model:'Better';
+ if(bt)$('#csub').textContent+=!r?' Better filter is on: select a radio from the map or table to set the reference.':(r['n'+band]==null&&r['w'+band]==null)?' Better filter: the selected radio has no results on this band.':` Better filter: radios at least as good as ${label(r)} on narrow-spacing${r['n'+band]==null?'':' ('+r['n'+band]+' dB)'} and wide-spacing${r['w'+band]==null?' (no wide figure, so narrow only)':' ('+r['w'+band]+' dB)'} range.`}
+function vis(){return rows.filter(o=>(!q||(o.make+' '+o.model).toLowerCase().includes(q))&&(!makes.size||makes.has(o.make))&&(view!=='new'||o.src)&&(view!=='full'||full(o))&&(view!=='chk'||o.v===0)&&(!hp||((hp===2||o['n'+band]>=HN)&&(hp===1||o['w'+band]>=HW)))&&(!bt||!ref()||beat(o,ref()))&&(o['s'+band]!=null||o['n'+band]!=null))}
 function sorted(l){const{k,d}=sort;return l.slice().sort((a,b)=>{if(k==='m')return d*(a.make+a.model).localeCompare(b.make+b.model);const x=get(a,k),y=get(b,k);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return -1;return d*(x-y)||a.model.localeCompare(b.model)})}
 function toggle(i){const x=sel.indexOf(i);if(x>=0)sel.splice(x,1);else{sel.push(i);if(sel.length>4)sel.shift()}render()}
 const label=o=>o.make+' '+o.model;
@@ -145,8 +150,14 @@ function chart(l){
  for(let v=40;v<=80;v+=10)s+=`<line class="g" x1="${X(v)}" x2="${X(v)}" y1="${T}" y2="${H-B}"/><text x="${X(v)}" y="${H-B+16}" text-anchor="middle">${v}</text>`;
  for(let v=50;v<=110;v+=10)s+=`<line class="g" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L-8}" y="${Y(v)+4}" text-anchor="end">${v}</text>`;
  s+=`<text x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle">Narrow-spacing dynamic range, 20 kHz (dB)</text><text transform="translate(12 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">Wide-spacing, 10 MHz (dB)</text><text x="${W-R-4}" y="${T+14}" text-anchor="end">better ↗</text>`;
- if(hp)s+=`<rect x="${X(HN)}" y="${T}" width="${W-R-X(HN)}" height="${Y(HW)-T}" fill="var(--acc)" opacity=".08"/><line x1="${X(HN)}" x2="${X(HN)}" y1="${T}" y2="${H-B}" stroke="var(--acc)" stroke-width="1.6" stroke-dasharray="2 5" stroke-linecap="round"/><line x1="${L}" x2="${W-R}" y1="${Y(HW)}" y2="${Y(HW)}" stroke="var(--acc)" stroke-width="1.6" stroke-dasharray="2 5" stroke-linecap="round"/><text x="${X(HN)+4}" y="${H-B-6}" style="fill:var(--acc)">narrow ≥ ${HN}</text><text x="${L+6}" y="${Y(HW)-5}" style="fill:var(--acc)">wide ≥ ${HW}</text>`;
+ if(hp){const vx=hp!==2,hy=hp!==1,x0=vx?X(HN):L,y1=hy?Y(HW):H-B,ln='stroke="var(--acc)" stroke-width="1.6" stroke-dasharray="2 5" stroke-linecap="round"';
+  s+=`<rect x="${x0}" y="${T}" width="${W-R-x0}" height="${y1-T}" fill="var(--acc)" opacity=".08"/>`;
+  if(vx)s+=`<line x1="${X(HN)}" x2="${X(HN)}" y1="${T}" y2="${H-B}" ${ln}/><text x="${X(HN)+4}" y="${H-B-6}" style="fill:var(--acc)">narrow ≥ ${HN}</text>`;
+  if(hy)s+=`<line x1="${L}" x2="${W-R}" y1="${Y(HW)}" y2="${Y(HW)}" ${ln}/><text x="${L+6}" y="${Y(HW)-5}" style="fill:var(--acc)">wide ≥ ${HW}</text>`}
  const WA=55,wy=o=>o['w'+band]==null?WA:o['w'+band],pts=l.filter(o=>o['n'+band]!=null);
+ const rf=bt?ref():null;
+ if(rf&&rf['n'+band]!=null){const rx=X(rf['n'+band]),ry=Y(wy(rf)),hw=rf['w'+band]!=null,ln2='stroke="var(--new)" stroke-width="1.6" stroke-dasharray="2 5" stroke-linecap="round"';
+  s+=`<rect x="${rx}" y="${T}" width="${W-R-rx}" height="${hw?ry-T:H-B-T}" fill="var(--new)" opacity=".07"/><line x1="${rx}" x2="${rx}" y1="${T}" y2="${H-B}" ${ln2}/>${hw?`<line x1="${L}" x2="${W-R}" y1="${ry}" y2="${ry}" ${ln2}/>`:''}`}
  pts.sort((a,b)=>sel.includes(a.id)-sel.includes(b.id));
  pts.forEach(o=>{const a=o['a'+band],r=a==null?4:3+Math.max(0,Math.min(7,(a-40)/8)),si=sel.indexOf(o.id);
   const st=si>=0?`stroke="${C[si]}" stroke-width="3.5"`:o['w'+band]==null?'stroke="var(--new)" stroke-width="2.5"':'stroke="var(--surf)" stroke-width="1"';
@@ -174,7 +185,7 @@ function table(l){
   return r+'</tr>'}).join('')||'<tr><td colspan="6" class="empty">No radios match these filters.</td></tr>';
  $('#tc').textContent=`· ${s.length} of ${rows.length} radios`;$('#cap').textContent=`Showing ${s.length} of ${rows.length}. † Partial score because a value was never measured. Click a heading to sort. Dot after the name: filled = checked against the ARRL review, ring = matches the QRP Blog compilation of QST data. ⚠ = unusually high 70 cm wide-spacing value, original not traced. ⓘ = see the tooltip.`;
 }
-function render(){const l=vis();chart(l);compare();table(l);if(hp)$('#csub').textContent+=` High-performance filter on: narrow ≥ ${HN} dB and wide ≥ ${HW} dB in the selected band.`}
+function render(){thr();const l=vis();chart(l);compare();table(l);rfUI();if(hp){const p=[];if(hp!==2)p.push('narrow ≥ '+HN+' dB');if(hp!==1)p.push('wide ≥ '+HW+' dB');$('#csub').textContent+=` High-performance filter (${['','narrow','wide','combo'][hp]}): ${p.join(' and ')}.`}}
 $('#chips').innerHTML=MK.map(m=>`<button class="chip" aria-pressed="false" data-m="${m}"><i style="background:hsl(${hue(m)} 62% 48%)"></i>${m}</button>`).join('');
 $('#n1').textContent=rows.length;
 
@@ -185,7 +196,8 @@ document.addEventListener('click',e=>{const t=e.target;let b;
  else if(b=t.closest('[data-k]')){const k=b.dataset.k;if(sort.k===k)sort.d*=-1;else sort={k,d:(k==='s'||k==='m')?1:-1};render()}
  else if(b=t.closest('[data-x]')){toggle(+b.dataset.x)}
  else if(t.closest('#clr')){sel=[];render()}
- else if(b=t.closest('#hp')){hp=!hp;b.setAttribute('aria-pressed',hp);render()}
+ else if(b=t.closest('#bt')){bt=!bt;render()}
+ else if(b=t.closest('#hp')){hp=(hp+1)%4;b.setAttribute('aria-pressed',hp>0);b.textContent=['High perf','High perf: narrow','High perf: wide','High perf: combo'][hp];render()}
  else if(t.closest('.pill')){}
  else if(b=t.closest('[data-i]')){toggle(+b.dataset.i)}});
 document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.dataset&&e.target.dataset.i!=null){e.preventDefault();toggle(+e.target.dataset.i)}});
