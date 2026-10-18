@@ -83,7 +83,7 @@ a{color:var(--acc)}
  <input type="search" id="q" placeholder="Search make or model" aria-label="Search radios">
  <div class="seg" role="group" aria-label="Show"><button data-v="all" aria-pressed="true">All</button><button data-v="full" aria-pressed="false">Complete data</button><button data-v="new" aria-pressed="false">Added</button></div>
  <button class="hp" id="hp" aria-pressed="false" title="Click to cycle: narrow ≥ 71 dB, wide ≥ 81 dB, both, then off">High perf</button>
- <button class="hp" id="bt" aria-pressed="false" title="Shows only radios at least as good as the most recently selected radio on both narrow-spacing and wide-spacing dynamic range. Select a radio first.">Better</button>
+ <button class="hp" id="bt" aria-pressed="false" title="Click to cycle: narrow, wide, combo, then off. Keeps radios at least as good as the most recently selected radio on that measure. Select a radio first.">Better</button>
 </div>
 <div class="chips" id="chips" role="group" aria-label="Filter by make"></div>
 
@@ -129,16 +129,17 @@ const $=s=>document.querySelector(s),C=['#0a84c6','#e0731a','#2f9e44','#a23cc0']
 const MK=[...new Set(rows.map(r=>r.make))].sort((a,b)=>a.localeCompare(b));
 const hue=m=>Math.round(MK.indexOf(m)*360/MK.length);
 const M={s:{n:'Sensitivity',u:'µV',lo:1,min:.08,max:.3},w:{n:'Wide-spacing DR',min:50,max:110},n:{n:'Narrow-spacing DR',min:35,max:80},a:{n:'Adjacent rejection',min:35,max:95},t:{n:'Score',min:100,max:260}};
-let band='2',q='',makes=new Set(),view='all',sort={k:'t',d:-1},sel=[],hp=0,bt=false;let HN=70,HW=80;function thr(){HN=71;HW=81}
+let band='2',q='',makes=new Set(),view='all',sort={k:'t',d:-1},sel=[],hp=0,bt=0;let HN=70,HW=80;function thr(){HN=71;HW=81}
 const full=o=>['w','n','a'].every(m=>o[m+band]!=null);
 function score(o){const p=['w','n','a'].map(m=>o[m+band]).filter(x=>x!=null);return p.length?p.reduce((a,b)=>a+b,0):null}
 const get=(o,k)=>k==='t'?score(o):o[k+band];
 const pct=(v,m)=>{let p=Math.max(0,Math.min(1,(v-m.min)/(m.max-m.min)));return Math.round((m.lo?1-p:p)*100)};
 const fmt=(v,k)=>v==null?'—':k==='s'?v.toFixed(2):v;
 const ref=()=>sel.length?rows[sel[sel.length-1]]:null;
-function beat(o,r){const n=r['n'+band],w=r['w'+band];return(n==null||o['n'+band]>=n)&&(w==null||o['w'+band]>=w)}
-function rfUI(){const r=ref(),b=$('#bt');b.setAttribute('aria-pressed',bt);b.textContent=bt&&r?'Better than '+r.model:'Better';
- if(bt)$('#csub').textContent+=!r?' Better filter is on: select a radio from the map or table to set the reference.':(r['n'+band]==null&&r['w'+band]==null)?' Better filter: the selected radio has no results on this band.':` Better filter: radios at least as good as ${label(r)} on narrow-spacing${r['n'+band]==null?'':' ('+r['n'+band]+' dB)'} and wide-spacing${r['w'+band]==null?' (no wide figure, so narrow only)':' ('+r['w'+band]+' dB)'} range.`}
+function beat(o,r){const n=r['n'+band],w=r['w'+band];return(bt===2||n==null||o['n'+band]>=n)&&(bt===1||w==null||o['w'+band]>=w)}
+function rfUI(){const r=ref(),b=$('#bt'),m=['','narrow','wide','combo'][bt];b.setAttribute('aria-pressed',bt>0);b.textContent=!bt?'Better':r?'Better than '+r.model+': '+m:'Better: '+m;
+ if(bt){const n=r&&r['n'+band],w=r&&r['w'+band],p=[];if(bt!==2&&n!=null)p.push('narrow-spacing ≥ '+n+' dB');if(bt!==1&&w!=null)p.push('wide-spacing ≥ '+w+' dB');
+  $('#csub').textContent+=!r?` Better filter (${m}): select a radio from the map or table to set the reference.`:p.length?` Better filter (${m}): radios at least as good as ${label(r)} (${p.join(' and ')}).`:` Better filter (${m}): ${label(r)} has no ${m} result on this band, so nothing is filtered.`}}
 function vis(){return rows.filter(o=>(!q||(o.make+' '+o.model).toLowerCase().includes(q))&&(!makes.size||makes.has(o.make))&&(view!=='new'||o.src)&&(view!=='full'||full(o))&&(view!=='chk'||o.v===0)&&(!hp||((hp===2||o['n'+band]>=HN)&&(hp===1||o['w'+band]>=HW)))&&(!bt||!ref()||beat(o,ref()))&&(o['s'+band]!=null||o['n'+band]!=null))}
 function sorted(l){const{k,d}=sort;return l.slice().sort((a,b)=>{if(k==='m')return d*(a.make+a.model).localeCompare(b.make+b.model);const x=get(a,k),y=get(b,k);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return -1;return d*(x-y)||a.model.localeCompare(b.model)})}
 function toggle(i){const x=sel.indexOf(i);if(x>=0)sel.splice(x,1);else{sel.push(i);if(sel.length>4)sel.shift()}render()}
@@ -156,8 +157,9 @@ function chart(l){
   if(hy)s+=`<line x1="${L}" x2="${W-R}" y1="${Y(HW)}" y2="${Y(HW)}" ${ln}/><text x="${L+6}" y="${Y(HW)-5}" style="fill:var(--acc)">wide ≥ ${HW}</text>`}
  const WA=55,wy=o=>o['w'+band]==null?WA:o['w'+band],pts=l.filter(o=>o['n'+band]!=null);
  const rf=bt?ref():null;
- if(rf&&rf['n'+band]!=null){const rx=X(rf['n'+band]),ry=Y(wy(rf)),hw=rf['w'+band]!=null,ln2='stroke="var(--new)" stroke-width="1.6" stroke-dasharray="2 5" stroke-linecap="round"';
-  s+=`<rect x="${rx}" y="${T}" width="${W-R-rx}" height="${hw?ry-T:H-B-T}" fill="var(--new)" opacity=".07"/><line x1="${rx}" x2="${rx}" y1="${T}" y2="${H-B}" ${ln2}/>${hw?`<line x1="${L}" x2="${W-R}" y1="${ry}" y2="${ry}" ${ln2}/>`:''}`}
+ if(rf){const vx=bt!==2&&rf['n'+band]!=null,hy=bt!==1&&rf['w'+band]!=null;
+  if(vx||hy){const rx=vx?X(rf['n'+band]):L,ry=hy?Y(rf['w'+band]):H-B,ln2='stroke="var(--new)" stroke-width="1.6" stroke-dasharray="2 5" stroke-linecap="round"';
+   s+=`<rect x="${rx}" y="${T}" width="${W-R-rx}" height="${ry-T}" fill="var(--new)" opacity=".07"/>`+(vx?`<line x1="${rx}" x2="${rx}" y1="${T}" y2="${H-B}" ${ln2}/>`:'')+(hy?`<line x1="${L}" x2="${W-R}" y1="${ry}" y2="${ry}" ${ln2}/>`:'')}}
  pts.sort((a,b)=>sel.includes(a.id)-sel.includes(b.id));
  pts.forEach(o=>{const a=o['a'+band],r=a==null?4:3+Math.max(0,Math.min(7,(a-40)/8)),si=sel.indexOf(o.id);
   const st=si>=0?`stroke="${C[si]}" stroke-width="3.5"`:o['w'+band]==null?'stroke="var(--new)" stroke-width="2.5"':'stroke="var(--surf)" stroke-width="1"';
@@ -196,7 +198,7 @@ document.addEventListener('click',e=>{const t=e.target;let b;
  else if(b=t.closest('[data-k]')){const k=b.dataset.k;if(sort.k===k)sort.d*=-1;else sort={k,d:(k==='s'||k==='m')?1:-1};render()}
  else if(b=t.closest('[data-x]')){toggle(+b.dataset.x)}
  else if(t.closest('#clr')){sel=[];render()}
- else if(b=t.closest('#bt')){bt=!bt;render()}
+ else if(b=t.closest('#bt')){bt=(bt+1)%4;render()}
  else if(b=t.closest('#hp')){hp=(hp+1)%4;b.setAttribute('aria-pressed',hp>0);b.textContent=['High perf','High perf: narrow','High perf: wide','High perf: combo'][hp];render()}
  else if(t.closest('.pill')){}
  else if(b=t.closest('[data-i]')){toggle(+b.dataset.i)}});
